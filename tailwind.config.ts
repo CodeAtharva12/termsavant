@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -84,11 +85,34 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'water-fill': {
+					'0%': {
+						transform: 'translateY(100%)'
+					},
+					'100%': {
+						transform: 'translateY(0%)'
+					}
+				},
+				'pulse-subtle': {
+					'0%, 100%': {
+						opacity: 1
+					},
+					'50%': {
+						opacity: 0.7
+					}
+				},
+				'fade-in': {
+					from: { opacity: '0' },
+					to: { opacity: '1' },
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'water-fill': 'water-fill 2s ease-in-out',
+				'pulse-subtle': 'pulse-subtle 2s infinite',
+				'fade-in': 'fade-in 0.3s ease-out',
 			}
 		}
 	},
