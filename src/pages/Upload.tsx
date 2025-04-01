@@ -4,12 +4,16 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { Upload as UploadIcon, File, FileText, FileSpreadsheet, Image, Mail, MessageSquare } from 'lucide-react';
+import { Upload as UploadIcon, File, FileText, FileSpreadsheet, Image, Mail, MessageSquare, Loader2 } from 'lucide-react';
+import { initTextExtractor, initTermClassifier, processDocument, ModelLoadingState } from '@/utils/aiProcessing';
 
 const Upload: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [ocrModelState, setOcrModelState] = useState<ModelLoadingState>('idle');
+  const [nlpModelState, setNlpModelState] = useState<ModelLoadingState>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -29,16 +33,66 @@ const Upload: React.FC = () => {
     return fileType ? fileType.icon : File;
   };
 
+  // Load AI models
+  const loadModels = async () => {
+    // Load OCR model
+    setOcrModelState('loading');
+    const ocrLoaded = await initTextExtractor();
+    setOcrModelState(ocrLoaded ? 'loaded' : 'error');
+    
+    // Load NLP model
+    setNlpModelState('loading');
+    const nlpLoaded = await initTermClassifier();
+    setNlpModelState(nlpLoaded ? 'loaded' : 'error');
+
+    // Show toast notification when models are loaded
+    if (ocrLoaded && nlpLoaded) {
+      toast({
+        title: "AI Models Loaded",
+        description: "The document processing models are ready to use.",
+      });
+    }
+  };
+
+  // Initialize models when component mounts
+  React.useEffect(() => {
+    loadModels();
+  }, []);
+
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      
+      // Create image preview if file is an image
+      if (selectedFile.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setImagePreview(e.target?.result as string);
+        };
+        reader.readAsDataURL(selectedFile);
+      } else {
+        setImagePreview(null);
+      }
     }
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      setFile(e.dataTransfer.files[0]);
+      const droppedFile = e.dataTransfer.files[0];
+      setFile(droppedFile);
+      
+      // Create image preview if file is an image
+      if (droppedFile.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setImagePreview(e.target?.result as string);
+        };
+        reader.readAsDataURL(droppedFile);
+      } else {
+        setImagePreview(null);
+      }
     }
   };
 
@@ -63,22 +117,64 @@ const Upload: React.FC = () => {
       });
     }, 200);
 
-    // Simulate API call delay
-    setTimeout(() => {
+    try {
+      // Process document with AI if it's an image
+      let documentFields = null;
+      
+      if (imagePreview && ocrModelState === 'loaded' && nlpModelState === 'loaded') {
+        // Process the document image with AI
+        documentFields = await processDocument(imagePreview);
+        
+        // Store the processed data in localStorage for demo purposes
+        // In a real app, this would be sent to a backend API
+        localStorage.setItem('processedDocument', JSON.stringify({
+          id: `doc-${Date.now()}`,
+          name: file.name.split('.')[0],
+          type: file.name.split('.').pop()?.toUpperCase() || 'UNKNOWN',
+          status: 'needs review',
+          date: new Date().toISOString().split('T')[0],
+          validationScore: documentFields.filter(field => field.valid).length / documentFields.length * 100,
+          content: documentFields
+        }));
+      }
+
       clearInterval(interval);
       setUploadProgress(100);
       
       toast({
         title: "Upload successful",
-        description: "Your document is being processed.",
+        description: documentFields 
+          ? "Your document has been processed with AI and is ready for review." 
+          : "Your document is being processed.",
       });
       
       setTimeout(() => {
         setIsUploading(false);
         navigate('/dashboard/documents');
       }, 1000);
-    }, 4000);
+      
+    } catch (error) {
+      clearInterval(interval);
+      console.error("Error processing document:", error);
+      
+      toast({
+        title: "Processing error",
+        description: "There was an error processing your document. Please try again.",
+        variant: "destructive",
+      });
+      
+      setIsUploading(false);
+    }
   };
+
+  // Check if models are loading or have failed
+  const isProcessingDisabled = 
+    isUploading || 
+    !file || 
+    ocrModelState === 'loading' || 
+    nlpModelState === 'loading' ||
+    ocrModelState === 'error' || 
+    nlpModelState === 'error';
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -95,6 +191,38 @@ const Upload: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* AI Models Status */}
+          <div className="mb-6 flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <div className={`h-2 w-2 rounded-full ${
+                ocrModelState === 'idle' ? 'bg-gray-300' :
+                ocrModelState === 'loading' ? 'bg-blue-500 animate-pulse' :
+                ocrModelState === 'loaded' ? 'bg-green-500' : 'bg-red-500'
+              }`}></div>
+              <span className="text-sm">
+                OCR Model: {
+                  ocrModelState === 'idle' ? 'Not Loaded' :
+                  ocrModelState === 'loading' ? 'Loading...' :
+                  ocrModelState === 'loaded' ? 'Ready' : 'Failed'
+                }
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={`h-2 w-2 rounded-full ${
+                nlpModelState === 'idle' ? 'bg-gray-300' :
+                nlpModelState === 'loading' ? 'bg-blue-500 animate-pulse' :
+                nlpModelState === 'loaded' ? 'bg-green-500' : 'bg-red-500'
+              }`}></div>
+              <span className="text-sm">
+                NLP Model: {
+                  nlpModelState === 'idle' ? 'Not Loaded' :
+                  nlpModelState === 'loading' ? 'Loading...' :
+                  nlpModelState === 'loaded' ? 'Ready' : 'Failed'
+                }
+              </span>
+            </div>
+          </div>
+
           <div
             className={`border-2 border-dashed rounded-lg p-12 flex flex-col items-center justify-center ${
               file ? 'bg-primary/5 border-primary/30' : 'border-border hover:border-primary/30 hover:bg-primary/5'
@@ -112,12 +240,25 @@ const Upload: React.FC = () => {
                 <p className="text-sm text-muted-foreground">
                   {(file.size / 1024 / 1024).toFixed(2)} MB
                 </p>
+                {imagePreview && (
+                  <div className="mt-4 max-w-xs mx-auto">
+                    <img 
+                      src={imagePreview} 
+                      alt="Document preview" 
+                      className="rounded-md border border-border" 
+                    />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Image preview (will be processed with AI)
+                    </p>
+                  </div>
+                )}
                 <Button
                   variant="secondary"
                   className="mt-4"
                   onClick={(e) => {
                     e.stopPropagation();
                     setFile(null);
+                    setImagePreview(null);
                   }}
                 >
                   Choose a different file
@@ -155,7 +296,7 @@ const Upload: React.FC = () => {
           {isUploading && (
             <div className="mt-6">
               <div className="text-sm mb-1 flex justify-between">
-                <span>Uploading...</span>
+                <span>Uploading and processing...</span>
                 <span>{uploadProgress}%</span>
               </div>
               <div className="h-2 bg-secondary rounded-full overflow-hidden water-fill-animation active">
@@ -177,9 +318,19 @@ const Upload: React.FC = () => {
           </Button>
           <Button
             onClick={handleUpload}
-            disabled={!file || isUploading}
+            disabled={isProcessingDisabled}
           >
-            {isUploading ? 'Uploading...' : 'Upload Document'}
+            {isUploading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <UploadIcon className="mr-2 h-4 w-4" />
+                {file?.type.startsWith('image/') ? 'Process with AI' : 'Upload Document'}
+              </>
+            )}
           </Button>
         </CardFooter>
       </Card>

@@ -15,6 +15,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { validateTerms, DocumentField } from '@/utils/aiProcessing';
+
+// Define document type
+interface Document {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  date: string;
+  validationScore: number;
+  content: DocumentField[];
+}
 
 // Mock document data
 const mockDocument = {
@@ -42,22 +54,39 @@ const mockDocument = {
 
 const EditDocument: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [document, setDocument] = useState<typeof mockDocument | null>(null);
+  const [document, setDocument] = useState<Document | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
+    // Try to get document from localStorage (from AI processing)
+    const storedDoc = localStorage.getItem('processedDocument');
+    
     // Simulate API fetch
     setTimeout(() => {
-      setDocument(mockDocument);
-      // Initialize edited values
-      const initialValues: Record<string, string> = {};
-      mockDocument.content.forEach(field => {
-        initialValues[field.id] = field.value;
-      });
-      setEditedValues(initialValues);
+      if (storedDoc) {
+        const parsedDoc = JSON.parse(storedDoc);
+        setDocument(parsedDoc);
+        
+        // Initialize edited values from stored document
+        const initialValues: Record<string, string> = {};
+        parsedDoc.content.forEach((field: DocumentField) => {
+          initialValues[field.id] = field.value;
+        });
+        setEditedValues(initialValues);
+      } else {
+        // Use mock data if no stored document
+        setDocument(mockDocument);
+        // Initialize edited values
+        const initialValues: Record<string, string> = {};
+        mockDocument.content.forEach(field => {
+          initialValues[field.id] = field.value;
+        });
+        setEditedValues(initialValues);
+      }
     }, 800);
   }, [id]);
 
@@ -68,31 +97,70 @@ const EditDocument: React.FC = () => {
     }));
   };
 
+  const handleValidate = async () => {
+    if (!document) return;
+    
+    setIsValidating(true);
+    
+    try {
+      // Create updated document fields with the edited values
+      const updatedFields = document.content.map(field => ({
+        ...field,
+        value: editedValues[field.id] || field.value
+      }));
+      
+      // Use AI to validate the fields
+      const validatedFields = await validateTerms(updatedFields);
+      
+      // Calculate new validation score
+      const validCount = validatedFields.filter(field => field.valid).length;
+      const newScore = Math.round((validCount / validatedFields.length) * 100);
+      
+      // Update the document with validated fields
+      setDocument({
+        ...document,
+        content: validatedFields,
+        validationScore: newScore,
+        status: newScore >= 90 ? 'validated' : 'needs review'
+      });
+      
+      toast({
+        title: "Validation complete",
+        description: `Document validation score: ${newScore}%`,
+      });
+      
+    } catch (error) {
+      console.error("Error validating document:", error);
+      toast({
+        title: "Validation failed",
+        description: "There was an error validating the document.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     
+    // Validate fields first
+    await handleValidate();
+    
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     setIsSaving(false);
+    
+    // Update localStorage for demo purposes
+    if (document) {
+      localStorage.setItem('processedDocument', JSON.stringify(document));
+    }
+    
     toast({
       title: "Changes saved",
       description: "Your document has been updated successfully.",
     });
-    
-    // Update document to set all fields as valid
-    if (document) {
-      setDocument({
-        ...document,
-        status: 'validated',
-        validationScore: 98,
-        content: document.content.map(field => ({
-          ...field,
-          value: editedValues[field.id] || field.value,
-          valid: true
-        }))
-      });
-    }
   };
 
   const handleDownload = (format: string) => {
@@ -119,9 +187,7 @@ const EditDocument: React.FC = () => {
   }
 
   const invalidFields = document.content.filter(field => !field.valid);
-  const validationPercentage = Math.round(
-    ((document.content.length - invalidFields.length) / document.content.length) * 100
-  );
+  const validationPercentage = document.validationScore;
 
   return (
     <div className="space-y-6">
@@ -173,11 +239,25 @@ const EditDocument: React.FC = () => {
               ))}
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="justify-between">
+            <Button 
+              onClick={handleValidate} 
+              variant="outline"
+              disabled={isValidating || isSaving}
+            >
+              {isValidating ? (
+                <>
+                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></span>
+                  Validating...
+                </>
+              ) : (
+                <>Validate with AI</>
+              )}
+            </Button>
+            
             <Button 
               onClick={handleSave} 
-              className="ml-auto"
-              disabled={isSaving}
+              disabled={isSaving || isValidating}
             >
               {isSaving ? (
                 <>
