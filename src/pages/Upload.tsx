@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,28 +32,42 @@ const Upload: React.FC = () => {
     return fileType ? fileType.icon : File;
   };
 
-  // Load AI models
   const loadModels = async () => {
-    // Load OCR model
-    setOcrModelState('loading');
-    const ocrLoaded = await initTextExtractor();
-    setOcrModelState(ocrLoaded ? 'loaded' : 'error');
-    
-    // Load NLP model
-    setNlpModelState('loading');
-    const nlpLoaded = await initTermClassifier();
-    setNlpModelState(nlpLoaded ? 'loaded' : 'error');
+    try {
+      setOcrModelState('loading');
+      toast({ title: "Loading OCR model", description: "Please wait while the model loads..." });
+      const ocrLoaded = await initTextExtractor();
+      setOcrModelState(ocrLoaded ? 'loaded' : 'error');
+      
+      setNlpModelState('loading');
+      toast({ title: "Loading NLP model", description: "Please wait while the model loads..." });
+      const nlpLoaded = await initTermClassifier();
+      setNlpModelState(nlpLoaded ? 'loaded' : 'error');
 
-    // Show toast notification when models are loaded
-    if (ocrLoaded && nlpLoaded) {
+      if (ocrLoaded && nlpLoaded) {
+        toast({
+          title: "AI Models Loaded",
+          description: "The document processing models are ready to use.",
+        });
+      } else {
+        toast({
+          title: "AI Models Loading Issue",
+          description: "Some models failed to load. The app will use offline processing instead.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error("Error loading AI models:", error);
       toast({
-        title: "AI Models Loaded",
-        description: "The document processing models are ready to use.",
+        title: "AI Models Loading Error",
+        description: "Failed to load AI models. The app will use offline processing instead.",
+        variant: "destructive"
       });
+      setOcrModelState('error');
+      setNlpModelState('error');
     }
   };
 
-  // Initialize models when component mounts
   React.useEffect(() => {
     loadModels();
   }, []);
@@ -64,7 +77,6 @@ const Upload: React.FC = () => {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
       
-      // Create image preview if file is an image
       if (selectedFile.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -83,7 +95,6 @@ const Upload: React.FC = () => {
       const droppedFile = e.dataTransfer.files[0];
       setFile(droppedFile);
       
-      // Create image preview if file is an image
       if (droppedFile.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -106,7 +117,6 @@ const Upload: React.FC = () => {
     setIsUploading(true);
     setUploadProgress(0);
 
-    // Simulate upload progress
     const interval = setInterval(() => {
       setUploadProgress((prev) => {
         if (prev >= 100) {
@@ -118,15 +128,16 @@ const Upload: React.FC = () => {
     }, 200);
 
     try {
-      // Process document with AI if it's an image
       let documentFields = null;
       
-      if (imagePreview && ocrModelState === 'loaded' && nlpModelState === 'loaded') {
-        // Process the document image with AI
+      if (imagePreview) {
+        toast({
+          title: "Processing document",
+          description: "Analyzing the document content...",
+        });
+        
         documentFields = await processDocument(imagePreview);
         
-        // Store the processed data in localStorage for demo purposes
-        // In a real app, this would be sent to a backend API
         localStorage.setItem('processedDocument', JSON.stringify({
           id: `doc-${Date.now()}`,
           name: file.name.split('.')[0],
@@ -144,8 +155,8 @@ const Upload: React.FC = () => {
       toast({
         title: "Upload successful",
         description: documentFields 
-          ? "Your document has been processed with AI and is ready for review." 
-          : "Your document is being processed.",
+          ? "Your document has been processed and is ready for review." 
+          : "Your document has been uploaded.",
       });
       
       setTimeout(() => {
@@ -167,14 +178,7 @@ const Upload: React.FC = () => {
     }
   };
 
-  // Check if models are loading or have failed
-  const isProcessingDisabled = 
-    isUploading || 
-    !file || 
-    ocrModelState === 'loading' || 
-    nlpModelState === 'loading' ||
-    ocrModelState === 'error' || 
-    nlpModelState === 'error';
+  const isProcessingDisabled = isUploading || !file;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -191,7 +195,6 @@ const Upload: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* AI Models Status */}
           <div className="mb-6 flex flex-wrap gap-4">
             <div className="flex items-center gap-2">
               <div className={`h-2 w-2 rounded-full ${
@@ -203,7 +206,7 @@ const Upload: React.FC = () => {
                 OCR Model: {
                   ocrModelState === 'idle' ? 'Not Loaded' :
                   ocrModelState === 'loading' ? 'Loading...' :
-                  ocrModelState === 'loaded' ? 'Ready' : 'Failed'
+                  ocrModelState === 'loaded' ? 'Ready' : 'Using offline mode'
                 }
               </span>
             </div>
@@ -217,7 +220,7 @@ const Upload: React.FC = () => {
                 NLP Model: {
                   nlpModelState === 'idle' ? 'Not Loaded' :
                   nlpModelState === 'loading' ? 'Loading...' :
-                  nlpModelState === 'loaded' ? 'Ready' : 'Failed'
+                  nlpModelState === 'loaded' ? 'Ready' : 'Using offline mode'
                 }
               </span>
             </div>
@@ -328,7 +331,7 @@ const Upload: React.FC = () => {
             ) : (
               <>
                 <UploadIcon className="mr-2 h-4 w-4" />
-                {file?.type.startsWith('image/') ? 'Process with AI' : 'Upload Document'}
+                {file?.type.startsWith('image/') ? 'Process Document' : 'Upload Document'}
               </>
             )}
           </Button>
