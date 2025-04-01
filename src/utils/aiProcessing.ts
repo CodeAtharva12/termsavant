@@ -58,7 +58,7 @@ export const initTermClassifier = async (): Promise<boolean> => {
 export const extractDocumentText = async (
   imageUrl: string,
   fields: Array<{ label: string }>
-): Promise<DocumentField[]> {
+) => {
   try {
     // Mock extraction since browser OCR is challenging
     const results: DocumentField[] = [];
@@ -127,7 +127,7 @@ export const extractDocumentText = async (
 };
 
 // Validate extracted terms using rules
-export const validateTerms = async (fields: DocumentField[]): Promise<DocumentField[]> {
+export const validateTerms = async (fields: DocumentField[]) => {
   try {
     return fields.map(field => {
       let isValid = true;
@@ -157,7 +157,7 @@ export const validateTerms = async (fields: DocumentField[]): Promise<DocumentFi
 // Process a document image end-to-end
 export const processDocument = async (
   imageUrl: string
-): Promise<DocumentField[]> => {
+) => {
   // Define the fields to extract based on common term sheet components
   const fieldsToExtract = [
     { label: 'Company Name' },
