@@ -17,14 +17,14 @@ let textExtractor: any = null;
 let termClassifier: any = null;
 
 // Initialize OCR model for text extraction
-export const initTextExtractor = async (): Promise<boolean> => {
+export const initTextExtractor = async () => {
   try {
     if (!textExtractor) {
       // Using a different model that's more reliable for browser environments
       textExtractor = await pipeline(
         "text-classification",
-        "distilbert-base-uncased-finetuned-sst-2-english",
-        { quantized: true }
+        "distilbert-base-uncased-finetuned-sst-2-english"
+        // Removed the quantized option as it's not supported in the type definition
       );
       console.log("Text extractor initialized successfully");
     }
@@ -36,14 +36,14 @@ export const initTextExtractor = async (): Promise<boolean> => {
 };
 
 // Initialize NLP model for key term recognition
-export const initTermClassifier = async (): Promise<boolean> => {
+export const initTermClassifier = async () => {
   try {
     if (!termClassifier) {
       // Using a simpler model that's more reliable for browser environments
       termClassifier = await pipeline(
         "text-classification",
-        "distilbert-base-uncased-finetuned-sst-2-english",
-        { quantized: true }
+        "distilbert-base-uncased-finetuned-sst-2-english"
+        // Removed the quantized option as it's not supported in the type definition
       );
       console.log("Term classifier initialized successfully");
     }
